@@ -1,23 +1,25 @@
-#if canImport(UIKit)
 import SwiftUI
 
 public let flowLayoutDefaultItemSpacing: CGFloat = 4
 
 public struct FlowLayout<RefreshBinding, Data, ItemView: View>: View {
+    
     let mode: Mode
     @Binding var binding: RefreshBinding
     let items: [Data]
     let itemSpacing: CGFloat
     @ViewBuilder let viewMapping: (Data) -> ItemView
     
-    @State private var totalHeight: CGFloat
+    @State private var computedHeight: CGFloat
     
     var shouldAnimateHeight: Binding<Bool>?
-    
+    var height: Binding<CGFloat>?
+
     public init(mode: Mode,
                 binding: Binding<RefreshBinding>,
                 items: [Data],
                 itemSpacing: CGFloat = flowLayoutDefaultItemSpacing,
+                height: Binding<CGFloat>? = nil,
                 shouldAnimateHeight: Binding<Bool>? = nil,
                 @ViewBuilder viewMapping: @escaping (Data) -> ItemView
     ) {
@@ -27,8 +29,30 @@ public struct FlowLayout<RefreshBinding, Data, ItemView: View>: View {
         self.itemSpacing = itemSpacing
         self.viewMapping = viewMapping
         self.shouldAnimateHeight = shouldAnimateHeight
-        _totalHeight = State(initialValue: (mode == .scrollable) ? .zero : .infinity)
+        self.height = height
+        _computedHeight = State(initialValue: (mode == .scrollable) ? .zero : .infinity)
     }
+}
+
+public extension FlowLayout where RefreshBinding == Never? {
+    init(mode: Mode,
+         items: [Data],
+         itemSpacing: CGFloat = flowLayoutDefaultItemSpacing,
+         height: Binding<CGFloat>? = nil,
+         shouldAnimateHeight: Binding<Bool>? = nil,
+         @ViewBuilder viewMapping: @escaping (Data) -> ItemView
+    ) {
+        self.init(mode: mode,
+                  binding: .constant(nil),
+                  items: items,
+                  itemSpacing: itemSpacing,
+                  height: height,
+                  shouldAnimateHeight: shouldAnimateHeight,
+                  viewMapping: viewMapping)
+    }
+}
+
+extension FlowLayout {
     
     public var body: some View {
         let stack = VStack {
@@ -38,11 +62,16 @@ public struct FlowLayout<RefreshBinding, Data, ItemView: View>: View {
         }
         return Group {
             if mode == .scrollable {
-                stack.frame(height: totalHeight)
+                stack.frame(height: computedHeight)
             } else {
-                stack.frame(maxHeight: totalHeight)
+                stack.frame(maxHeight: computedHeight)
             }
         }
+        .onChange(of: computedHeight, perform: computedHeightChanged)
+    }
+    
+    func computedHeightChanged(to newValue: CGFloat) {
+        self.height?.wrappedValue = newValue
     }
     
     private func content(in g: GeometryProxy) -> some View {
@@ -79,7 +108,7 @@ public struct FlowLayout<RefreshBinding, Data, ItemView: View>: View {
         }
         .background(
             HeightReaderView(
-                binding: $totalHeight,
+                binding: $computedHeight,
                 shouldAnimate: shouldAnimateHeight
             )
         )
@@ -116,21 +145,3 @@ private struct HeightReaderView: View {
         }
     }
 }
-
-
-public extension FlowLayout where RefreshBinding == Never? {
-    init(mode: Mode,
-         items: [Data],
-         itemSpacing: CGFloat = flowLayoutDefaultItemSpacing,
-         shouldAnimateHeight: Binding<Bool>? = nil,
-         @ViewBuilder viewMapping: @escaping (Data) -> ItemView
-    ) {
-        self.init(mode: mode,
-                  binding: .constant(nil),
-                  items: items,
-                  itemSpacing: itemSpacing,
-                  shouldAnimateHeight: shouldAnimateHeight,
-                  viewMapping: viewMapping)
-    }
-}
-#endif
